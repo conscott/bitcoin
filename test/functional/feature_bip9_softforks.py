@@ -23,7 +23,7 @@ import itertools
 from test_framework.test_framework import ComparisonTestFramework
 from test_framework.util import *
 from test_framework.mininode import CTransaction, network_thread_start
-from test_framework.blocktools import create_coinbase, create_block
+from test_framework.blocktools import create_coinbase, create_block, create_signed_transaction, sign_transaction
 from test_framework.comptool import TestInstance, TestManager
 from test_framework.script import CScript, OP_1NEGATE, OP_CHECKSEQUENCEVERIFY, OP_DROP
 
@@ -38,24 +38,6 @@ class BIP9SoftForksTest(ComparisonTestFramework):
         self.test.add_all_connections(self.nodes)
         network_thread_start()
         self.test.run()
-
-    def create_transaction(self, node, coinbase, to_address, amount):
-        from_txid = node.getblock(coinbase)['tx'][0]
-        inputs = [{ "txid" : from_txid, "vout" : 0}]
-        outputs = { to_address : amount }
-        rawtx = node.createrawtransaction(inputs, outputs)
-        tx = CTransaction()
-        f = BytesIO(hex_str_to_bytes(rawtx))
-        tx.deserialize(f)
-        tx.nVersion = 2
-        return tx
-
-    def sign_transaction(self, node, tx):
-        signresult = node.signrawtransaction(bytes_to_hex_str(tx.serialize()))
-        tx = CTransaction()
-        f = BytesIO(hex_str_to_bytes(signresult['hex']))
-        tx.deserialize(f)
-        return tx
 
     def generate_blocks(self, number, version, test_blocks = []):
         for i in range(number):
@@ -79,6 +61,7 @@ class BIP9SoftForksTest(ComparisonTestFramework):
 
         # generate some coins for later
         self.coinbase_blocks = self.nodes[0].generate(2)
+        self.coinbase_txs = [self.nodes[0].getblock(block)['tx'][0] for block in self.coinbase_blocks]
         self.height = 3  # height of the next block to build
         self.tip = int("0x" + self.nodes[0].getbestblockhash(), 0)
         self.nodeaddress = self.nodes[0].getnewaddress()
@@ -191,10 +174,10 @@ class BIP9SoftForksTest(ComparisonTestFramework):
 
         # Test 5
         # Check that the new rule is enforced
-        spendtx = self.create_transaction(self.nodes[0],
-                self.coinbase_blocks[0], self.nodeaddress, 1.0)
+        spendtx = create_signed_transaction(self.nodes[0],
+                self.coinbase_txs[0], self.nodeaddress, 1.0)
         invalidate(spendtx)
-        spendtx = self.sign_transaction(self.nodes[0], spendtx)
+        spendtx = sign_transaction(self.nodes[0], spendtx)
         spendtx.rehash()
         invalidatePostSignature(spendtx)
         spendtx.rehash()
@@ -220,10 +203,10 @@ class BIP9SoftForksTest(ComparisonTestFramework):
 
         # Test 6
         # Check that the new sequence lock rules are enforced
-        spendtx = self.create_transaction(self.nodes[0],
-                self.coinbase_blocks[1], self.nodeaddress, 1.0)
+        spendtx = create_signed_transaction(self.nodes[0],
+                self.coinbase_txs[1], self.nodeaddress, 1.0)
         invalidate(spendtx)
-        spendtx = self.sign_transaction(self.nodes[0], spendtx)
+        spendtx = sign_transaction(self.nodes[0], spendtx)
         spendtx.rehash()
         invalidatePostSignature(spendtx)
         spendtx.rehash()

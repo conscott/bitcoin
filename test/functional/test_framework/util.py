@@ -529,8 +529,8 @@ def gen_return_txouts():
         txouts = txouts + script_pubkey
     return txouts
 
-def create_tx(node, coinbase, to_address, amount):
-    inputs = [{"txid": coinbase, "vout": 0}]
+def create_raw_tx(node, txid, to_address, amount):
+    inputs = [{"txid": txid, "vout": 0}]
     outputs = {to_address: amount}
     rawtx = node.createrawtransaction(inputs, outputs)
     signresult = node.signrawtransaction(rawtx)

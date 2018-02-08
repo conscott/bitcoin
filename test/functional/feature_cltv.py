@@ -11,7 +11,7 @@ Test that the CHECKLOCKTIMEVERIFY soft-fork activates at (regtest) block height
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import *
 from test_framework.mininode import *
-from test_framework.blocktools import create_coinbase, create_block
+from test_framework.blocktools import create_coinbase, create_block, create_signed_transaction
 from test_framework.script import CScript, OP_1NEGATE, OP_CHECKLOCKTIMEVERIFY, OP_DROP, CScriptNum
 from io import BytesIO
 
@@ -49,16 +49,6 @@ def cltv_validate(node, tx, height):
                                   list(CScript(new_tx.vin[0].scriptSig)))
     return new_tx
 
-def create_transaction(node, coinbase, to_address, amount):
-    from_txid = node.getblock(coinbase)['tx'][0]
-    inputs = [{ "txid" : from_txid, "vout" : 0}]
-    outputs = { to_address : amount }
-    rawtx = node.createrawtransaction(inputs, outputs)
-    signresult = node.signrawtransaction(rawtx)
-    tx = CTransaction()
-    tx.deserialize(BytesIO(hex_str_to_bytes(signresult['hex'])))
-    return tx
-
 class BIP65Test(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
@@ -75,11 +65,12 @@ class BIP65Test(BitcoinTestFramework):
 
         self.log.info("Mining %d blocks", CLTV_HEIGHT - 2)
         self.coinbase_blocks = self.nodes[0].generate(CLTV_HEIGHT - 2)
+        self.coinbase_txs = [self.nodes[0].getblock(block)['tx'][0] for block in self.coinbase_blocks]
         self.nodeaddress = self.nodes[0].getnewaddress()
 
         self.log.info("Test that an invalid-according-to-CLTV transaction can still appear in a block")
 
-        spendtx = create_transaction(self.nodes[0], self.coinbase_blocks[0],
+        spendtx = create_signed_transaction(self.nodes[0], self.coinbase_txs[0],
                 self.nodeaddress, 1.0)
         cltv_invalidate(spendtx)
         spendtx.rehash()
@@ -114,7 +105,7 @@ class BIP65Test(BitcoinTestFramework):
         self.log.info("Test that invalid-according-to-cltv transactions cannot appear in a block")
         block.nVersion = 4
 
-        spendtx = create_transaction(self.nodes[0], self.coinbase_blocks[1],
+        spendtx = create_signed_transaction(self.nodes[0], self.coinbase_txs[1],
                 self.nodeaddress, 1.0)
         cltv_invalidate(spendtx)
         spendtx.rehash()

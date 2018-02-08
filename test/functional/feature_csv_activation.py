@@ -46,7 +46,7 @@ bip112tx_special - test negative argument to OP_CSV
 from test_framework.test_framework import ComparisonTestFramework
 from test_framework.util import *
 from test_framework.mininode import ToHex, CTransaction, network_thread_start
-from test_framework.blocktools import create_coinbase, create_block
+from test_framework.blocktools import create_coinbase, create_block, create_signed_transaction, sign_transaction
 from test_framework.comptool import TestInstance, TestManager
 from test_framework.script import *
 from io import BytesIO
@@ -105,24 +105,7 @@ class BIP68_112_113Test(ComparisonTestFramework):
 
     def send_generic_input_tx(self, node, coinbases):
         amount = Decimal("49.99")
-        return node.sendrawtransaction(ToHex(self.sign_transaction(node, self.create_transaction(node, node.getblock(coinbases.pop())['tx'][0], self.nodeaddress, amount))))
-
-    def create_transaction(self, node, txid, to_address, amount):
-        inputs = [{ "txid" : txid, "vout" : 0}]
-        outputs = { to_address : amount }
-        rawtx = node.createrawtransaction(inputs, outputs)
-        tx = CTransaction()
-        f = BytesIO(hex_str_to_bytes(rawtx))
-        tx.deserialize(f)
-        return tx
-
-    def sign_transaction(self, node, unsignedtx):
-        rawtx = ToHex(unsignedtx)
-        signresult = node.signrawtransaction(rawtx)
-        tx = CTransaction()
-        f = BytesIO(hex_str_to_bytes(signresult['hex']))
-        tx.deserialize(f)
-        return tx
+        return node.sendrawtransaction(ToHex(create_signed_transaction(node, node.getblock(coinbases.pop())['tx'][0], self.nodeaddress, amount)))
 
     def generate_blocks(self, number, version, test_blocks = []):
         for i in range(number):
@@ -153,20 +136,20 @@ class BIP68_112_113Test(ComparisonTestFramework):
                 for b22 in range(2):
                     b18txs = []
                     for b18 in range(2):
-                        tx =  self.create_transaction(self.nodes[0], bip68inputs[i], self.nodeaddress, Decimal("49.98"))
+                        tx =  create_signed_transaction(self.nodes[0], bip68inputs[i], self.nodeaddress, Decimal("49.98"))
                         i += 1
                         tx.nVersion = txversion
                         tx.vin[0].nSequence = relative_locktimes[b31][b25][b22][b18] + locktime_delta
-                        b18txs.append(self.sign_transaction(self.nodes[0], tx))
+                        b18txs.append(sign_transaction(self.nodes[0], tx))
                     b22txs.append(b18txs)
                 b25txs.append(b22txs)
             txs.append(b25txs)
         return txs
 
     def create_bip112special(self, input, txversion):
-        tx = self.create_transaction(self.nodes[0], input, self.nodeaddress, Decimal("49.98"))
+        tx = create_signed_transaction(self.nodes[0], input, self.nodeaddress, Decimal("49.98"))
         tx.nVersion = txversion
-        signtx = self.sign_transaction(self.nodes[0], tx)
+        signtx = sign_transaction(self.nodes[0], tx)
         signtx.vin[0].scriptSig = CScript([-1, OP_CHECKSEQUENCEVERIFY, OP_DROP] + list(CScript(signtx.vin[0].scriptSig)))
         return signtx
 
@@ -181,14 +164,14 @@ class BIP68_112_113Test(ComparisonTestFramework):
                 for b22 in range(2):
                     b18txs = []
                     for b18 in range(2):
-                        tx =  self.create_transaction(self.nodes[0], bip112inputs[i], self.nodeaddress, Decimal("49.98"))
+                        tx =  create_signed_transaction(self.nodes[0], bip112inputs[i], self.nodeaddress, Decimal("49.98"))
                         i += 1
                         if (varyOP_CSV): # if varying OP_CSV, nSequence is fixed
                             tx.vin[0].nSequence = base_relative_locktime + locktime_delta
                         else: # vary nSequence instead, OP_CSV is fixed
                             tx.vin[0].nSequence = relative_locktimes[b31][b25][b22][b18] + locktime_delta
                         tx.nVersion = txversion
-                        signtx = self.sign_transaction(self.nodes[0], tx)
+                        signtx = sign_transaction(self.nodes[0], tx)
                         if (varyOP_CSV):
                             signtx.vin[0].scriptSig = CScript([relative_locktimes[b31][b25][b22][b18], OP_CHECKSEQUENCEVERIFY, OP_DROP] + list(CScript(signtx.vin[0].scriptSig)))
                         else:
@@ -281,10 +264,10 @@ class BIP68_112_113Test(ComparisonTestFramework):
 
         # Test both version 1 and version 2 transactions for all tests
         # BIP113 test transaction will be modified before each use to put in appropriate block time
-        bip113tx_v1 = self.create_transaction(self.nodes[0], bip113input, self.nodeaddress, Decimal("49.98"))
+        bip113tx_v1 = create_signed_transaction(self.nodes[0], bip113input, self.nodeaddress, Decimal("49.98"))
         bip113tx_v1.vin[0].nSequence = 0xFFFFFFFE
         bip113tx_v1.nVersion = 1
-        bip113tx_v2 = self.create_transaction(self.nodes[0], bip113input, self.nodeaddress, Decimal("49.98"))
+        bip113tx_v2 = create_signed_transaction(self.nodes[0], bip113input, self.nodeaddress, Decimal("49.98"))
         bip113tx_v2.vin[0].nSequence = 0xFFFFFFFE
         bip113tx_v2.nVersion = 2
 
@@ -319,7 +302,7 @@ class BIP68_112_113Test(ComparisonTestFramework):
         success_txs = []
         # add BIP113 tx and -1 CSV tx
         bip113tx_v1.nLockTime = self.last_block_time - 600 * 5 # = MTP of prior block (not <) but < time put on current block
-        bip113signed1 = self.sign_transaction(self.nodes[0], bip113tx_v1)
+        bip113signed1 = sign_transaction(self.nodes[0], bip113tx_v1)
         success_txs.append(bip113signed1)
         success_txs.append(bip112tx_special_v1)
         # add BIP 68 txs
@@ -337,7 +320,7 @@ class BIP68_112_113Test(ComparisonTestFramework):
         success_txs = []
         # add BIP113 tx and -1 CSV tx
         bip113tx_v2.nLockTime = self.last_block_time - 600 * 5 # = MTP of prior block (not <) but < time put on current block
-        bip113signed2 = self.sign_transaction(self.nodes[0], bip113tx_v2)
+        bip113signed2 = sign_transaction(self.nodes[0], bip113tx_v2)
         success_txs.append(bip113signed2)
         success_txs.append(bip112tx_special_v2)
         # add BIP 68 txs
@@ -364,16 +347,16 @@ class BIP68_112_113Test(ComparisonTestFramework):
         ### BIP 113 ###
         # BIP 113 tests should now fail regardless of version number if nLockTime isn't satisfied by new rules
         bip113tx_v1.nLockTime = self.last_block_time - 600 * 5 # = MTP of prior block (not <) but < time put on current block
-        bip113signed1 = self.sign_transaction(self.nodes[0], bip113tx_v1)
+        bip113signed1 = sign_transaction(self.nodes[0], bip113tx_v1)
         bip113tx_v2.nLockTime = self.last_block_time - 600 * 5 # = MTP of prior block (not <) but < time put on current block
-        bip113signed2 = self.sign_transaction(self.nodes[0], bip113tx_v2)
+        bip113signed2 = sign_transaction(self.nodes[0], bip113tx_v2)
         for bip113tx in [bip113signed1, bip113signed2]:
             yield TestInstance([[self.create_test_block([bip113tx]), False]]) # 9,10
         # BIP 113 tests should now pass if the locktime is < MTP
         bip113tx_v1.nLockTime = self.last_block_time - 600 * 5 - 1 # < MTP of prior block
-        bip113signed1 = self.sign_transaction(self.nodes[0], bip113tx_v1)
+        bip113signed1 = sign_transaction(self.nodes[0], bip113tx_v1)
         bip113tx_v2.nLockTime = self.last_block_time - 600 * 5 - 1 # < MTP of prior block
-        bip113signed2 = self.sign_transaction(self.nodes[0], bip113tx_v2)
+        bip113signed2 = sign_transaction(self.nodes[0], bip113tx_v2)
         for bip113tx in [bip113signed1, bip113signed2]:
             yield TestInstance([[self.create_test_block([bip113tx]), True]]) # 11,12
             self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
@@ -521,7 +504,7 @@ class BIP68_112_113Test(ComparisonTestFramework):
             for b18 in range(2):
                 tx = bip112txs_vary_OP_CSV_v2[0][b25][1][b18]
                 tx.vin[0].nSequence = base_relative_locktime | seq_type_flag
-                signtx = self.sign_transaction(self.nodes[0], tx)
+                signtx = sign_transaction(self.nodes[0], tx)
                 time_txs.append(signtx)
         yield TestInstance([[self.create_test_block(time_txs), True]]) # 125
         self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())

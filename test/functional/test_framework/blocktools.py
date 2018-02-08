@@ -21,7 +21,7 @@ from .script import (
     OP_TRUE,
     hash160,
 )
-from .util import assert_equal
+from .util import assert_equal, create_raw_tx
 
 # Create a block (with regtest difficulty)
 def create_block(hashprev, coinbase, nTime=None):
@@ -86,7 +86,7 @@ def serialize_script_num(value):
 # otherwise an anyone-can-spend output.
 def create_coinbase(height, pubkey = None):
     coinbase = CTransaction()
-    coinbase.vin.append(CTxIn(COutPoint(0, 0xffffffff), 
+    coinbase.vin.append(CTxIn(COutPoint(0, 0xffffffff),
                 ser_string(serialize_script_num(height)), 0xffffffff))
     coinbaseoutput = CTxOut()
     coinbaseoutput.nValue = 50 * COIN
@@ -108,6 +108,21 @@ def create_transaction(prevtx, n, sig, value, scriptPubKey=CScript()):
     tx.vin.append(CTxIn(COutPoint(prevtx.sha256, n), sig, 0xffffffff))
     tx.vout.append(CTxOut(value, scriptPubKey))
     tx.calc_sha256()
+    return tx
+
+def create_signed_transaction(node, txid, to_address, amount):
+    signresult = create_raw_tx(node, txid, to_address, amount)
+    tx = CTransaction()
+    f = BytesIO(hex_str_to_bytes(signresult))
+    tx.deserialize(f)
+    return tx
+
+def sign_transaction(node, unsignedtx):
+    rawtx = ToHex(unsignedtx)
+    signresult = node.signrawtransaction(rawtx)
+    tx = CTransaction()
+    f = BytesIO(hex_str_to_bytes(signresult['hex']))
+    tx.deserialize(f)
     return tx
 
 def get_legacy_sigopcount_block(block, fAccurate=True):
